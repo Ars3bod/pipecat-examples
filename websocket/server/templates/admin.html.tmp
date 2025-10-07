@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة قاعدة المعرفة - RAG النظام</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="/static/css/admin.css" rel="stylesheet">
+    <style>
+        body { font-family: 'Arial', sans-serif; background-color: #f8f9fa; }
+        .navbar-brand { font-weight: bold; color: #2c3e50; }
+        .card { border: none; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .btn-primary { background-color: #3498db; border: none; }
+        .btn-success { background-color: #27ae60; border: none; }
+        .btn-danger { background-color: #e74c3c; border: none; }
+        .form-label { font-weight: bold; color: #2c3e50; }
+        .tab-content { padding: 20px 0; }
+        .alert { border-radius: 10px; }
+        .table th { background-color: #34495e; color: white; }
+        .badge { font-size: 0.8em; }
+        .upload-area { border: 2px dashed #3498db; padding: 40px; text-align: center; border-radius: 10px; }
+        .upload-area:hover { background-color: #f8f9fa; }
+        .document-item { background: white; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #3498db; }
+        .loading { display: none; }
+        .error-message { color: #e74c3c; font-size: 0.9em; margin-top: 5px; }
+        .success-message { color: #27ae60; font-size: 0.9em; margin-top: 5px; }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-brain me-2"></i>
+                إدارة قاعدة المعرفة - الهيئة
+            </a>
+            <div class="navbar-nav ms-auto">
+                <span class="navbar-text">
+                    <i class="fas fa-user-circle me-1"></i>
+                    مدير النظام
+                </span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container mt-4">
+        <!-- Header -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <h2><i class="fas fa-database me-2"></i>لوحه إدارة قاعدة المعرفة</h2>
+                <p class="text-muted">قم بتحميل وإدارة الوثائق التنظيمية لنظام الذكاء الاصطناعي</p>
+            </div>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <i class="fas fa-file-alt fa-2x text-primary mb-2"></i>
+                        <h5 id="total-docs">0</h5>
+                        <p class="text-muted mb-0">إجمالي الوثائق</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+               <c>
+                    <i class="fas fa-users fa-2x text-success mb-2"></i>
+                    <h5 id="total-departments">0</h5>
+                    <p class="text-muted mb-0">الأقسام</p>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <i class="fas fa-tags fa-2x text-warning mb-2"></i>
+                        <h5 id="total-categories">0</h5>
+                        <p class="text-muted mb-0">الفئات</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <i class="fas fa-globe fa-2x text-info mb-2"></i>
+                        <h5 id="total-languages">0</h5>
+                        <p class="text-muted mb-0">اللغات</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content Tabs -->
+        <ul class="nav nav-tabs" id="adminTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload" type="button" role="tab">
+                    <i class="fas fa-upload me-2"></i>تحميل وثائق جديدة
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="manage-tab" data-bs-toggle="tab" data-bs-target="#manage" type="button" role="tab">
+                    <i class="fas fa-folder-open me-2"></i>إدارة الوثائق
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="test-tab" data-bs-toggle="tab" data-bs-target="#test" type="button" role="tab">
+                    <i class="fas fa-search me-2"></i>اختبار الاستعلامات
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="stats-tab" data-bs-toggle="tab" data-bs-target="#stats" type="button" role="tab">
+                    <i class="fas fa-chart-bar me-2"></i>الإحصائيات
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="adminTabsContent">
+            <!-- Upload Tab -->
+            <div class="tab-pane fade show active" id="upload" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-plus-circle me-2"></i>تحميل وثيقة جديدة</h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- Document Upload Form -->
+                                <form id="uploadForm">
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">عنوان الوثيقة *</label>
+                                            <input type="text" class="form-control" id="title" required>
+                                            <div class="error-message" id="title-error"></div>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">القسم *</label>
+                                            <select class="form-select" id="department"net>
+                                                <option value="">اختر القسم</option>
+                                                <option value="HR">الموارد البشرية</option>
+                                                <option value="IT">تقنية المعلومات</option>
+                                                <option value="Admin">الإدارة</option>
+                                                <option value="Finance">المالية</option>
+                                                <option value="Operations">العمليات</option>
+                                                <option value="Training">التدريب</option>
+                                            </select>
+                                            <div class="error-message" id="department-error"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">الفئة *</label>
+                                            <select class="form-select" id="category" required>
+                                                <option value="">اختر الفئة</option>
+                                                <option value="policies">السياسات</option>
+                                                <option value="procedures">الإجراءات</option>
+                                                <option value="guidelines">الإرشادات</option>
+                                                <option value="regulations">اللوائح</option>
+                                                <option value="announcements">الإعلانات</option>
+                                                <option value="training_materials">مواد التدريب</option>
+                                                <option value="manuals">الأدلة</option>
+                                                <option value="faq">الأسئلة الشائعة</option>
+                                                <option value="contact_info">معلومات الاتصال</option>
+                                                <option value="other">أخرى</option>
+                                            </select>
+                                            <div class="error-message" id="category-error"></div>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">المؤلف</label>
+                                            <input type="text" class="form-control" id="author" placeholder="اسم المؤلف">
+                                        </div>
+                                    </div>
+
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">اللغة *</label>
+                                            <select class="form-select" id="language" required>
+                                                <option value="ar">العربية</option>
+                                                <option value="en">English</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 mb-3">
+                                            <label class="form-label">النسخة</label>
+                                            <input type="text" class="form-control" id="version" value="1.0" placeholder="1.0">
+                                        </div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label">الوسوم (اختياري)</label>
+                                        <input type="text" class="form-control" id="tags" placeholder="وسم1، وسم2، وسم3">
+                                        <small class="form-text text-muted">افصل الوسوم بفواصل</small>
+                                    </div>
+
+                                    <!-- Upload Type Selection -->
+                                    <div class="mb-3">
+                                        <label class="form-label">نوع التحميل *</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="uploadType" id="uploadText" value="text" checked>
+                                            <label class="form-check-label" for="uploadText">
+                                                تحميل نص مباشر
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="radio" name="uploadType" id="uploadFile" value="file">
+                                            <label class="form-check-label" for="uploadFile">
+                                                تحميل ملف (PDF, Word, Excel, Text)
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Text Upload Area -->
+                                    <div id="text-upload-area" class="mb-3">
+                                        <label class="form-label">محتوى الوثيقة *</label>
+                                        <textarea class="form-control" id="content" rows="8" placeholder="أكتب محتوى الوثيقة هنا..."></textarea>
+                                        <div class="error-message" id="content-error"></div>
+                                    </div>
+
+                                    <!-- File Upload Area -->
+                                    <div id="file-upload-area" class="mb-3" style="display: none;">
+                                        <label class="form-label">ملف الوثيقة *</label>
+                                        <div class="upload-area mb-2" onclick="document.getElementById('fileInput').click();">
+                                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                            <p class="mb-2">انقر هنا لاختيار الملف أو اسحب الملف هنا</p>
+                                            <p class="text-muted small">ملفات مدعومة: PDF, DOCX, XLSX, TXT</p>
+                                        </div>
+                                        <input type="file" class="form-control" id="fileInput" accept=".pdf,.docx,.xlsx,.txt" style="display: none;">
+                                        <div class="error-message" id="file-error"></div>
+                                    </div>
+
+                                    <!-- Submit Button -->
+                                    <div class="d-grid gap-2 mt-3">
+                                        <button type="submit" class="btn btn-primary btn-lg">
+                                            <i class="fas fa-upload me-2"></i>تحميل الوثيقة
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Upload Tips -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6><i class="fas fa-lightbulb me-2"></i>نصائح سريعة</h6>
+                            </div>
+                            <div class="card-body">
+                                <ul class="list-unstyled">
+                                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>استخدم عناوين واضحة ومحددة</li>
+                                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>اختر القسم والفئة الصحيحتين</li>
+                                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>اكتب المحتوى بشكل منظم ومفهوم</li>
+                                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>استخدم الوسوم للبحث السهل</li>
+                                    <li class="mb-2"><i class="fas fa-check text-success me-2"></i>اترك معلومات المؤلف لتتبع التحديثات</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- Document Templates -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6><i class="fas fa-file-text me-2"></i>قوالب سريعة</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2">
+                                    <button class="btn btn-outline-primary btn-sm" onclick="loadTemplate('hr')">
+                                        سياسة موارد بشرية
+                                    </button>
+                                    <button class="btn btn-outline-primary btn-sm" onclick="loadTemplate('it'),">
+                                        سياسة تقنية معلومات
+                                    </button>
+                                    <button class="btn btn-outline-primary btn-sm" onclick="loadTemplate('announcement'),">
+                                        إعلان رسمي
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Manage Documents Tab -->
+            <div class="tab-pane fade" id="manage" role="tabpanel">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-folder-open me-2"></i>إدارة الوثائق</h5>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-outline-primary btn-sm" onclick="refreshDocuments(),">
+                                <i class="fas fa-refresh me-1"></i>تحديث
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="deleteSelected()">
+                                <i class="fas fa-trash me-1"></i>حذف المحدد
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <!-- Search and Filter -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" id="searchDocs" placeholder="البحث في الوثائق...">
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="filterDepartment">
+                                    <option value="">جميع الأقسام</option>
+                                    <option value="HR">الموارد البشرية</option>
+                                    <option value="IT">تقنية المعلومات</option>
+                                    <option value="Admin">الإدارة</option>
+                                    <option value="Finance">المالية</option>
+                                    <option value="Training">التدريب</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="filterCategory">
+                                    <option value="">جميع الفئات</option>
+                                    <option value="policies">السياسات</option>
+                                    <option value="procedures">الإجراءات</option>
+                                    <option value="announcements">الإعلانات</option>
+                                    <option value="training_materials">مواد التدريب</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-secondary w-100" onclick="filterDocuments(),">
+                                    <i class="fas fa-filter me-1"></i>تصفية
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Documents List -->
+                        <div id="documents-list">
+                            <div class="text-center text-muted py-4">
+                                <i class="fas fa-spinner fa-spin fa-2x mb-2"></i>
+                                <p>جاري تحميل الوثائق...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Test Queries Tab -->
+            <div class="tab-pane fade" id="test" role="tabpanel">
+                <div class="row">
+                    <div class="col-lg-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-search me-2"></i>اختبار الاستعلامات</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="mb-3">
+                                    <label class="form-label">اكتب استعلام أدناه وتماشى المعرفة</label>
+                                    <textarea class="form-control" id="testQuery" rows="3" placeholder="مثال: ما هي سياسات الإجازات؟ أو What are the working hours?"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <label class="form-label">اللغة</label>
+                                            <select class="form-select" id="testLanguage">
+                                                <option value="ar">العربية</option>
+                                                <option value="en">English</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6 d-flex align-items-end">
+                                            <button class="btn btn-primary w-100" onclick="testQuerySystem()">
+                                                <i class="fas fa-play me-2"></i>تشغيل الاختبار
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Test Results -->
+                                <div id="test-results" style="display: none;">
+                                    <div class="alert alert-info">
+                                        <h6><i class="fas fa-info-circle me-2"></i>نتيجة الاستعلام:</h6>
+                                        <p id="test-answer" class="mb-0"></p>
+                                    </div>
+                                    <div id="test-sources" class="mt-3"></div>
+                                    <div id="test-confidence" class="mt-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Sample Queries -->
+                    <div class="col-lg-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6><i class="fas fa-lightbulb me-2"></i>أمثلة على الاستعلامات</h6>
+                            </div>
+                            <div class="card-body">
+                                <h6>العربية:</h6>
+                                <ul class="list-unstyled">
+                                    <li><a href="#" class="text-info" onclick="setTestQuery(this.textContent)">ما هي سياسات الإجازات؟</a></li>
+                                    <li><a href="#" class="text-info" onclick="setTestQuery(this.textContent)">طرق تسجيل الإجازة</a></li>
+                                    <li><a href="#" class="text-info" onclick="setTestQuery(this.textContent)">ساعات العمل الرسمية</a></li>
+                                    <li><a href="#" class="text-info" onclick="setTestQuery(this.textContent)">المزايا المتوفرة للموظفين</a></li>
+                                </ul>
+                                <h6 class="mt-3">English:</h6>
+                                <ul class="list-unstyled">
+                                    <li><a href="#" class="text-info" onclick="setTestQuery(this.textContent)">What are the working hours?</a></li>
+                                    <li><a href="#" class="text-info" onclick="setTestQuery(this.textContent)">How to apply for leave?</a></li>
+                                    <li><a href="#" class="text-info" onclick="setTestQuery(this.textContent)">Employee benefits</a></li>
+                                    <li><a href="#" class="text-info" onclick="setTestQuery(this.textContent)">IT security policies</a></li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <!-- System Status -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6><i class="fas fa-cog me-2"></i>حالة النظام</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="system-status">
+                                    <div class="mb-2">
+                                        <span class="badge bg-success" id="rag-status">نشط</span>
+                                        RAG Engine
+                                    </div>
+                                    <div class="mb-2">
+                                        <span class="badge bg-success" id="vector-db-status">متاح</span>
+                                        Vector Database
+                                    </div>
+                                    <div class="mb-2">
+                                        <span class="badge bg-success" id="embeddings-status">جاهز</span>
+                                        Embeddings
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics Tab -->
+             style="display: none;">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-chart-bar me-2"></i>إحصائيات قاعدة المعرفة</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6>الوثائق حسب القسم:</h6>
+                                        <canvas id="departmentChart"></canvas>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6>الوثائق حسب الفئة:</h6>
+                                        <canvas id="categoryChart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="row mt-4">
+                                    <div class="col-md-6">
+                                        <h6>الوثائق حسب اللغة:</h6>
+                                        <canvas id="languageChart"></canvas>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h6>إحصائيات الإصدارات:</h6>
+                                        <div id="version-stats"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Custom JS -->
+    <script src="/static/js/admin.js"></script>
+</body>
+</html>

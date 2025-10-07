@@ -3,3 +3,17 @@ fastapi[all]
 uvicorn
 pipecat-ai[silero,websocket,google]>=0.0.82
 loguru
+
+# RAG Knowledge Management System Dependencies
+chromadb>=0.4.0
+sentence-transformers>=2.2.0
+pypdf2>=3.0.0
+python-docx>=0.8.11
+openpyxl>=3.1.0
+langdetect>=1.0.9
+nltk>=3.8.0
+openai>=1.0.0
+google-generativeai>=0.3.0
+numpy>=1.24.0
+pandas>=2.0.0
+torch>=2.0.0

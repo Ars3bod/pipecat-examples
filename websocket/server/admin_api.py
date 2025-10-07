@@ -1,0 +1,374 @@
+#!/usr/bin/env python3
+"""
+FastAPI Backend for RAG Admin Interface
+Provides REST API endpoints for document management
+"""
+
+import os
+import sys
+import asyncio
+import json
+from pathlib import Path
+from typing import List, Dict, Any, Optional
+import uuid
+from datetime import datetime
+
+# Add current directory to Python path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.requests import Request
+from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
+
+from dotenv import load_dotenv
+load_dotenv(override=True)
+
+from rag_system.content_manager import ContentManager
+from rag_system.document_processor import DocumentProcessor
+from rag_enhanced_bot import rag_bot
+
+# Initialize FastAPI app
+app = FastAPI(title="RAG Admin Interface", version="1.0.0")
+
+# Mount static files and templates
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+# Initialize RAG components
+content_manager = ContentManager()
+document_processor = DocumentProcessor()
+
+# Pydantic models
+class DocumentUploadRequest(BaseModel):
+    title: str
+    department: str
+    category: str
+    language: str
+    author: str = "غير محدد"
+    version: str = "1.0"
+    tags: List[str] = []
+    uploadType: str
+    content: Optional[str] = None
+    fileName: Optional[str] = None
+    fileSize: Optional[int] = None
+
+class QueryTestRequest(BaseModel):
+    query: str
+    language: str = "ar"
+
+class DocumentMeta(BaseModel):
+    document_id: str
+    title: str
+    department: str
+    category: str
+    language: str
+    author: str
+    version: str
+    created_date: str
+    last_updated: str
+    tags: List[str]
+
+# API Routes
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_interface(request: Request):
+    """Serve the admin interface HTML page."""
+    return templates.TemplateResponse("admin.html", {"request": request})
+
+@app.get("/admin/documents")
+async def get_documents():
+    """Get all documents in the knowledge base."""
+    try:
+        documents = await content_manager.list_documents()
+        
+        # Convert to API format
+        formatted_docs = []
+        for doc in documents:
+            formatted_docs.append({
+                "document_id": doc["document_id"],
+                "title": doc["title"],
+                "department": doc["department"],
+                "category": doc["category"],
+                "language": doc["language"],
+                "author": doc["author"],
+                "version": doc["version"],
+                "created_date": doc["created_date"],
+                "last_updated": doc["last_updated"],
+                "tags": doc.get("tags", [])
+            })
+        
+        return {
+            "success": True,
+            "documents": formatted_docs,
+            "total": len(formatted_docs)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
+            "success": False,
+            "error": str(e)
+        })
+
+@app.post("/admin/upload-document")
+async def upload_document(request_data: DocumentUploadRequest):
+    """Upload a new document to the knowledge base."""
+    try:
+        # Prepare metadata
+        metadata = {
+            "title": request_data.title,
+            "department": request_data.department,
+            "category": request_data.category,
+            "language": request_data.language,
+            "author": request_data.author,
+            "version": request_data.version,
+            "created_date": datetime.now().isoformat(),
+            "last_updated": datetime.now().isoformat(),
+            "classification": "internal",
+            "tags": request_data.tags
+        }
+        
+        if request_data.uploadType == "text":
+            if not request_data.content:
+                raise HTTPException(status_code=400, detail={
+                    "success": False,
+                    "error": "محتوى الوثيقة مطلق"
+                })
+            
+            result = await content_manager.add_document_from_text(
+                request_data.content, metadata
+            )
+            
+        else:
+            # For file upload, we'll need to handle it separately
+            raise HTTPException(status_code=501, detail={
+                "success": False,
+                "error": "تحميل الملفات غير مدعوم حالياً، استخدم النص المباشر"
+            })
+        
+        return {
+            "success": True,
+            "document_id": result["document_id"],
+            "message": "تم تحميل الوثيقة بنجاح"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
+            "success": False,
+            "error": str(e)
+        })
+
+@app.get("/admin/document/{document_id}")
+async def get_document(document_id: str):
+    """Get a specific document by ID."""
+    try:
+        documents = await content_manager.list_documents()
+        
+        document = None
+        for doc in documents:
+            if doc["document_id"] == document_id:
+                document = doc
+                break
+        
+        if not document:
+            raise HTTPException(status_code=404, detail={
+                "success": False,
+                "error": "الوثيقة غير موجودة"
+            })
+        
+        return {
+            "success": True,
+            "document": document
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
+            "success": False,
+            "error": str(e)
+        })
+
+@app.delete("/admin/document/{document_id}")
+async def delete_document(document_id: str):
+    """Delete a specific document."""
+    try:
+        result = await content_manager.delete_document(document_id)
+        
+        if result.get("success", True):
+            return {
+                "success": True,
+                "message": "تم حذف الوثيقة بنجاح"
+            }
+        else:
+            raise HTTPException(status_code=500, detail={
+                "success": False,
+                "error": result.get("error", "فشل في حذف الوثيقة")
+            })
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
+            "success": False,
+            "error": str(e)
+        })
+
+@app.delete("/admin/documents")
+async def delete_documents(request_data: Dict[str, List[str]]):
+    """Delete multiple documents."""
+    try:
+        document_ids = request_data.get("documents", [])
+        
+        if not document_ids:
+            raise HTTPException(status_code=400, detail={
+                "success": False,
+                "error": "لم يتم تحديد وثائق للحذف"
+            })
+        
+        deleted_count = 0
+        errors = []
+        
+        for doc_id in document_ids:
+            try:
+                await content_manager.delete_document(doc_id)
+                deleted_count += 1
+            except Exception as e:
+                errors.append(f"فشل حذف {doc_id}: {str(e)}")
+        
+        return {
+            "success": True,
+            "deleted_count": deleted_count,
+            "errors": errors,
+            "message": f"تم حذف {deleted_count} وثيقة بنجاح"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
+            "success": False,
+            "error": str(e)
+        })
+
+@app.post("/admin/test-query")
+async def test_query(request_data: QueryTestRequest):
+    """Test a query against the RAG system."""
+    try:
+        # Use the RAG-enhanced bot to process the query
+        result = await rag_bot.process_query(
+            request_data.query, 
+            language=request_data.language
+        )
+        
+        return {
+            "success": True,
+            "query": request_data.query,
+            "language": request_data.language,
+            "answer": result["response"],
+            "sources": result.get("sources", [])[:3],  # Limit to top 3 sources
+            "confidence": result.get("confidence", 0.0),
+            "rag_enhanced": result.get("rag_enhanced", False)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
+            "success": False,
+            "error": str(e)
+        })
+
+@app.get("/admin/stats")
+async def get_statistics():
+    """Get knowledge base statistics."""
+    try:
+        documents = await content_manager.list_documents()
+        
+        # Calculate statistics
+        total_documents = len(documents)
+        
+        departments = {}
+        categories = {}
+        languages = {}
+        versions = {}
+        
+        for doc in documents:
+            # Department stats
+            dept = doc["department"]
+            departments[dept] = departments.get(dept, 0) + 1
+            
+            # Category stats
+            cat = doc["category"]
+            categories[cat] = categories.get(cat, 0) + 1
+            
+            # Language stats
+            lang = doc["language"]
+            languages[lang] = languages.get(lang, 0) + 1
+            
+            # Version stats
+            version = doc.get("version", "1.0")
+            versions[version] = versions.get(version, 0) + 1
+        
+        return {
+            "success": True,
+            "statistics": {
+                "total_documents": total_documents,
+                "departments": departments,
+                "categories": categories,
+                "languages": languages,
+                "versions": versions
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail={
+            "success": False,
+            "error": str(e)
+        })
+
+@app.get("/admin/system-status")
+async def get_system_status():
+    """Get system status information."""
+    try:
+        status = await rag_bot.get_system_status()
+        
+        return {
+            "success": True,
+            "status": status
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "status": {
+                "rag_initialized": False,
+                "rag_available": False,
+                "config_valid": False,
+                "organizational_filter": True
+            },
+            "error": str(e)
+        }
+
+@app.get("/")
+async def root():
+    """Redirect to admin interface."""
+    return {"message": "RAG Admin Interface", "admin_url": "/admin"}
+
+# Error handlers
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc):
+    return HTMLResponse(content="<h1>الصفحة غير موجودة</h1><p><a href='/admin'>العودة للوحة الإدارة</a></p>", status_code=404)
+
+@app.exception_handler(500)
+async def internal_error_handler(request: Request, exc):
+    return HTMLResponse(content="<h1>خطأ في الخادم</h1><p><a href='/admin'>العودة للوحة الإدارة</a></p>", status_code=500)
+
+if __name__ == "__main__":
+    import uvicorn
+    print("🚀 Starting RAG Admin Interface...")
+    print(f"📊 Admin Panel: http://localhost:8000/admin")
+    print(f"📚 API Docs: http://localhost:8000/docs")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
